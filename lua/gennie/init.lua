@@ -5,6 +5,7 @@ M.config = {
 	default_profile = "default",
 	default_model = "sonnet",
 	is_followup = false,
+	last_buffer = nil,
 }
 
 -- Escape shell arguments properly
@@ -155,6 +156,7 @@ local function execute_gennie(q)
 					vim.bo[buf].modifiable = true
 					vim.api.nvim_buf_set_lines(buf, 0, -1, false, data)
 					vim.bo[buf].modifiable = false
+					M.config.last_buffer = data
 				end)
 			end
 		end,
@@ -228,6 +230,18 @@ function M.ask_gennie_visual()
 	end)
 end
 
+function M.last_answer()
+	if not M.config.last_buffer then
+		vim.notify("No previous question", vim.log.levels.INFO)
+		return
+	end
+
+	local buf, win = create_floating_window()
+	vim.bo[buf].modifiable = true
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, M.config.last_buffer)
+	vim.bo[buf].modifiable = false
+end
+
 -- Set up the plugin
 function M.setup(opts)
 	opts = opts or {}
@@ -238,6 +252,10 @@ function M.setup(opts)
 	-- Create user commands with parameter support
 	vim.api.nvim_create_user_command("Gennie", function()
 		M.ask_gennie()
+	end, {})
+
+	vim.api.nvim_create_user_command("GennieLast", function()
+		M.last_answer()
 	end, {})
 
 	vim.api.nvim_create_user_command("GennieVisual", function(args)
