@@ -11,7 +11,18 @@ return {
   dir = "~/Code/personal/gennie.nvim",
   config = true,
   keys = {
-    { "<leader>a", "<cmd>Gennie<cr>", desc = "Ask Gennie" },
+    {
+      "<leader>a",
+      "<cmd>Gennie<cr>",
+      desc = "Ask Gennie",
+      mode = "n",
+    },
+    {
+      "<leader>a",
+      "<cmd>GennieVisual<cr>",
+      desc = "Ask Gennie With Selected",
+      mode = "v",
+    },
   },
 }
 
