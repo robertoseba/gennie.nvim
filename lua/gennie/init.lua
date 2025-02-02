@@ -60,14 +60,14 @@ end
 -- Function to build the gennie command with parameters
 local function build_command(question)
 	if not question or question == "" then
-		return nil, "Question cannot be empty"
+		return {}, "Question cannot be empty"
 	end
 
 	local cmd_parts = { "gennie", "ask", "--stream=false" }
 
 	-- Add profile if specified
 	if M.config.default_profile then
-		local profile = shell_escape(M.config.default_profile)
+		local profile = M.config.default_profile
 		if profile then
 			table.insert(cmd_parts, "-p=" .. profile)
 		end
@@ -75,7 +75,7 @@ local function build_command(question)
 
 	-- Add model if specified
 	if M.config.default_model then
-		local model = shell_escape(M.config.default_model)
+		local model = M.config.default_model
 		if model then
 			table.insert(cmd_parts, "-m=" .. model)
 		end
@@ -89,7 +89,7 @@ local function build_command(question)
 	-- Add the question
 	table.insert(cmd_parts, shell_escape(question))
 
-	return table.concat(cmd_parts, " "), nil
+	return cmd_parts, nil
 end
 
 -- Create a new buffer with proper cleanup
@@ -143,45 +143,29 @@ local function execute_gennie(q)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "Loading..." })
 
 	-- Execute command
-	local job_id = vim.fn.jobstart(cmd, {
-		stdout_buffered = true,
-		on_stdout = function(_, data)
-			if not data then
-				return
+	vim.system(cmd, { text = true }, function(obj)
+		if obj.code ~= 0 then
+			vim.notify("Gennie command failed with exit code: " .. obj.code, vim.log.levels.ERROR)
+			if obj.stderr and #obj.stderr > 0 then
+				vim.notify("Gennie error: " .. obj.stderr, vim.log.levels.ERROR)
 			end
+			return
+		end
+
+		if obj.stdout then
+			local data = vim.split(obj.stdout, "\n")
+			print(vim.inspect(data))
 			-- Check if buffer still exists
-			if vim.api.nvim_buf_is_valid(buf) then
-				vim.schedule(function()
-					-- Remove "Loading..." message
+			vim.schedule(function()
+				if vim.api.nvim_buf_is_valid(buf) then
 					vim.bo[buf].modifiable = true
 					vim.api.nvim_buf_set_lines(buf, 0, -1, false, data)
 					vim.bo[buf].modifiable = false
-					M.config.last_buffer = data
-				end)
-			end
-		end,
-		on_stderr = function(_, data)
-			if data and data[1] ~= "" then
-				vim.schedule(function()
-					vim.notify("Gennie error: " .. vim.inspect(data), vim.log.levels.ERROR)
-				end)
-			end
-		end,
-		on_exit = function(_, exit_code)
-			if exit_code ~= 0 then
-				vim.schedule(function()
-					vim.notify("Gennie command failed with exit code: " .. exit_code, vim.log.levels.ERROR)
-				end)
-			end
-		end,
-	})
-
-	if job_id <= 0 then
-		vim.notify("Failed to start gennie command", vim.log.levels.ERROR)
-		if vim.api.nvim_buf_is_valid(buf) then
-			vim.api.nvim_buf_delete(buf, { force = true })
+				end
+				M.config.last_buffer = data
+			end)
 		end
-	end
+	end)
 end
 
 function M.set_config(args)
