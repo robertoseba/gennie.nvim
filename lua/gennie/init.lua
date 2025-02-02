@@ -2,8 +2,8 @@ local M = {}
 
 -- Store configuration
 M.config = {
-	default_profile = nil,
-	default_model = nil,
+	default_profile = "default",
+	default_model = "sonnet",
 	is_followup = false,
 }
 
@@ -16,7 +16,7 @@ local function shell_escape(str)
 	return "'" .. string.gsub(str, "'", "'\\''") .. "'"
 end
 
--- Parse command arguments safely
+-- Parse config command arguments safely
 local function parse_command_args(args)
 	local cmd_opts = {}
 
@@ -34,14 +34,19 @@ local function parse_command_args(args)
 			vim.notify("Invalid params. Please use only -p, -m or -f", vim.log.levels.ERROR)
 		end
 	end
-	-- Join question parts if they exist
+
 	return cmd_opts
 end
---
--- Function to build the gennie command with parameters
-local function build_command(question, opts)
-	opts = opts or {}
 
+-- Input dialog
+local function input_dialog(callback)
+	vim.ui.input({
+		prompt = "Ask Gennie -> " .. M.config.default_model .. " -> " .. M.config.default_profile .. ":",
+	}, callback)
+end
+
+-- Function to build the gennie command with parameters
+local function build_command(question)
 	if not question or question == "" then
 		return nil, "Question cannot be empty"
 	end
@@ -49,23 +54,23 @@ local function build_command(question, opts)
 	local cmd_parts = { "gennie", "ask", "--stream=false" }
 
 	-- Add profile if specified
-	if opts.profile or M.config.default_profile then
-		local profile = shell_escape(opts.profile or M.config.default_profile)
+	if M.config.default_profile then
+		local profile = shell_escape(M.config.default_profile)
 		if profile then
 			table.insert(cmd_parts, "-p=" .. profile)
 		end
 	end
 
 	-- Add model if specified
-	if opts.model or M.config.default_model then
-		local model = shell_escape(opts.model or M.config.default_model)
+	if M.config.default_model then
+		local model = shell_escape(M.config.default_model)
 		if model then
 			table.insert(cmd_parts, "-m=" .. model)
 		end
 	end
 
 	-- Add followup flag if specified
-	if opts.followup or M.config.is_followup == true then
+	if M.config.is_followup == true then
 		table.insert(cmd_parts, "-f")
 	end
 
@@ -108,6 +113,64 @@ local function create_floating_window()
 	return buf, win
 end
 
+local function execute_gennie(q)
+	local cmd, err = build_command(q)
+	if err then
+		vim.notify("Gennie error: " .. err, vim.log.levels.ERROR)
+		return
+	end
+
+	-- Create window before starting job
+	local buf, win = create_floating_window()
+	if not buf or not win then
+		vim.notify("Failed to create window", vim.log.levels.ERROR)
+		return
+	end
+
+	-- Initial buffer content
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "Loading..." })
+
+	-- Execute command
+	local job_id = vim.fn.jobstart(cmd, {
+		stdout_buffered = true,
+		on_stdout = function(_, data)
+			if not data then
+				return
+			end
+			-- Check if buffer still exists
+			if vim.api.nvim_buf_is_valid(buf) then
+				vim.schedule(function()
+					-- Remove "Loading..." message
+					vim.bo[buf].modifiable = true
+					vim.api.nvim_buf_set_lines(buf, 0, -1, false, data)
+					vim.bo[buf].modifiable = false
+				end)
+			end
+		end,
+		on_stderr = function(_, data)
+			if data and data[1] ~= "" then
+				vim.schedule(function()
+					vim.notify("Gennie error: " .. vim.inspect(data), vim.log.levels.ERROR)
+				end)
+			end
+		end,
+		on_exit = function(_, exit_code)
+			if exit_code ~= 0 then
+				vim.schedule(function()
+					vim.notify("Gennie command failed with exit code: " .. exit_code, vim.log.levels.ERROR)
+				end)
+			end
+		end,
+	})
+
+	if job_id <= 0 then
+		vim.notify("Failed to start gennie command", vim.log.levels.ERROR)
+		if vim.api.nvim_buf_is_valid(buf) then
+			vim.api.nvim_buf_delete(buf, { force = true })
+		end
+	end
+end
+
 function M.set_config(args)
 	local opts = parse_command_args(args.fargs)
 	if opts.model then
@@ -118,85 +181,22 @@ function M.set_config(args)
 		M.config.default_profile = opts.profile
 		vim.notify("Gennie Profile set to:" .. opts.profile, vim.log.levels.INFO)
 	end
-	if opts.followup then
+	if opts.followup ~= nil then
+		print(opts.followup)
 		M.config.is_followup = opts.followup
 	end
 end
 
-function M.ask_gennie(opts, question)
-	local function execute_gennie(q)
-		local cmd, err = build_command(q, opts)
-		if err then
-			vim.notify("Gennie error: " .. err, vim.log.levels.ERROR)
-			return
+function M.ask_gennie()
+	input_dialog(function(q)
+		if q and q ~= "" then
+			execute_gennie(q)
 		end
-
-		-- Create window before starting job
-		local buf, win = create_floating_window()
-		if not buf or not win then
-			vim.notify("Failed to create window", vim.log.levels.ERROR)
-			return
-		end
-
-		-- Initial buffer content
-		vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "Loading..." })
-
-		-- Execute command
-		local job_id = vim.fn.jobstart(cmd, {
-			stdout_buffered = true,
-			on_stdout = function(_, data)
-				if not data then
-					return
-				end
-				-- Check if buffer still exists
-				if vim.api.nvim_buf_is_valid(buf) then
-					vim.schedule(function()
-						-- Remove "Loading..." message
-						vim.bo[buf].modifiable = true
-						vim.api.nvim_buf_set_lines(buf, 0, -2, false, data)
-						vim.bo[buf].modifiable = false
-					end)
-				end
-			end,
-			on_stderr = function(_, data)
-				if data and data[1] ~= "" then
-					vim.schedule(function()
-						vim.notify("Gennie error: " .. vim.inspect(data), vim.log.levels.ERROR)
-					end)
-				end
-			end,
-			on_exit = function(_, exit_code)
-				if exit_code ~= 0 then
-					vim.schedule(function()
-						vim.notify("Gennie command failed with exit code: " .. exit_code, vim.log.levels.ERROR)
-					end)
-				end
-			end,
-		})
-
-		if job_id <= 0 then
-			vim.notify("Failed to start gennie command", vim.log.levels.ERROR)
-			if vim.api.nvim_buf_is_valid(buf) then
-				vim.api.nvim_buf_delete(buf, { force = true })
-			end
-		end
-	end
-
-	if question and question ~= "" then
-		execute_gennie(question)
-	else
-		vim.ui.input({ prompt = "Ask Gennie: " }, function(q)
-			if q and q ~= "" then
-				execute_gennie(q)
-			end
-		end)
-	end
+	end)
 end
 
 -- Function to ask gennie about selected text
 function M.ask_gennie_visual()
-	opts = opts or {}
-
 	-- Get selected text
 	local start_pos = vim.fn.getpos("'<")
 	local end_pos = vim.fn.getpos("'>")
@@ -207,14 +207,12 @@ function M.ask_gennie_visual()
 		return
 	end
 
-	-- Get the selected text
-	local text = table.concat(lines, "\n")
+	local selected_text = table.concat(lines, "\n")
 
-	-- Prompt for question
-	vim.ui.input({ prompt = "Ask Gennie about selection: " }, function(q)
+	input_dialog(function(q)
 		if q and q ~= "" then
-			local full_question = string.format("Regarding this excerpt:\n%s\n\nQuestion: %s", text, q)
-			M.ask_gennie(opts, full_question)
+			local full_question = string.format("Regarding this excerpt:\n%s\n\nQuestion: %s", selected_text, q)
+			execute_gennie(full_question)
 		end
 	end)
 end
@@ -223,8 +221,8 @@ end
 function M.setup(opts)
 	opts = opts or {}
 	-- Store default configuration
-	M.config.default_profile = opts.default_profile
-	M.config.default_model = opts.default_model
+	M.config.default_profile = opts.default_profile or "default"
+	M.config.default_model = opts.default_model or "sonnet"
 
 	-- Create user commands with parameter support
 	vim.api.nvim_create_user_command("Gennie", function()
