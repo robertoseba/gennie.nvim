@@ -40,8 +40,19 @@ end
 
 -- Input dialog
 local function input_dialog(callback)
+	local is_followup = ""
+	if M.config.is_followup then
+		is_followup = "(FollowUp)"
+	end
+
 	vim.ui.input({
-		prompt = "Ask Gennie -> " .. M.config.default_model .. " -> " .. M.config.default_profile .. ":",
+		prompt = "Ask Gennie"
+			.. is_followup
+			.. " -> "
+			.. M.config.default_model
+			.. " -> "
+			.. M.config.default_profile
+			.. ":",
 	}, callback)
 end
 
