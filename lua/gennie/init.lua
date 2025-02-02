@@ -154,7 +154,6 @@ local function execute_gennie(q)
 
 		if obj.stdout then
 			local data = vim.split(obj.stdout, "\n")
-			print(vim.inspect(data))
 			-- Check if buffer still exists
 			vim.schedule(function()
 				if vim.api.nvim_buf_is_valid(buf) then
@@ -168,8 +167,7 @@ local function execute_gennie(q)
 	end)
 end
 
-function M.set_config(args)
-	local opts = parse_command_args(args.fargs)
+local function set_config_vars(opts)
 	if opts.model then
 		M.config.default_model = opts.model
 		vim.notify("Gennie Model set to:" .. opts.model, vim.log.levels.INFO)
@@ -179,9 +177,27 @@ function M.set_config(args)
 		vim.notify("Gennie Profile set to:" .. opts.profile, vim.log.levels.INFO)
 	end
 	if opts.followup ~= nil then
-		print(opts.followup)
 		M.config.is_followup = opts.followup
 	end
+end
+
+function M.set_config(args)
+	if args then
+		local opts = parse_command_args(args.fargs)
+		set_config_vars(opts)
+		return
+	end
+
+	vim.ui.input({
+		prompt = "Config Gennie:",
+	}, function(iargs)
+		if not iargs or iargs == "" then
+			return
+		end
+		local data = vim.split(iargs, " ")
+		local opts = parse_command_args(data)
+		set_config_vars(opts)
+	end)
 end
 
 function M.ask_gennie()
