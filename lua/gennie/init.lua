@@ -4,6 +4,7 @@ local M = {}
 M.config = {
 	default_profile = nil,
 	default_model = nil,
+	is_followup = false,
 }
 
 -- Escape shell arguments properly
@@ -15,13 +16,37 @@ local function shell_escape(str)
 	return "'" .. string.gsub(str, "'", "'\\''") .. "'"
 end
 
+-- Parse command arguments safely
+local function parse_command_args(args)
+	local cmd_opts = {}
+
+	for _, arg in ipairs(args) do
+		local profile = arg:match("^%-p=(.+)$")
+		local model = arg:match("^%-m=(.+)$")
+		local followup = arg:match("^%-f=(.+)$")
+		if profile then
+			cmd_opts.profile = profile
+		elseif model then
+			cmd_opts.model = model
+		elseif followup then
+			cmd_opts.followup = followup == "true"
+		else
+			vim.notify("Invalid params. Please use only -p, -m or -f", vim.log.levels.ERROR)
+		end
+	end
+	-- Join question parts if they exist
+	return cmd_opts
+end
+--
 -- Function to build the gennie command with parameters
 local function build_command(question, opts)
+	opts = opts or {}
+
 	if not question or question == "" then
 		return nil, "Question cannot be empty"
 	end
 
-	local cmd_parts = { "gennie", "ask", "stream=false" }
+	local cmd_parts = { "gennie", "ask" }
 
 	-- Add profile if specified
 	if opts.profile or M.config.default_profile then
@@ -40,7 +65,7 @@ local function build_command(question, opts)
 	end
 
 	-- Add followup flag if specified
-	if opts.followup then
+	if opts.followup or M.config.is_followup then
 		table.insert(cmd_parts, "-f")
 	end
 
@@ -83,17 +108,23 @@ local function create_floating_window()
 	return buf, win
 end
 
-function M.set_model(model)
-	M.config.default_model = model
-	vim.notify(model, vim.log.levels.INFO)
+function M.set_config(args)
+	local opts = parse_command_args(args.fargs)
+	if opts.model then
+		M.config.default_model = opts.model
+		vim.notify("Gennie Model set to:" .. opts.model, vim.log.levels.INFO)
+	end
+	if opts.profile then
+		M.config.default_profile = opts.profile
+		vim.notify("Gennie Profile set to:" .. opts.profile, vim.log.levels.INFO)
+	end
+	if opts.followup then
+		M.config.is_followup = opts.followup
+	end
 end
 
--- Function to execute gennie and show results in a floating window
 function M.ask_gennie(opts, question)
-	opts = opts or {}
-
 	local function execute_gennie(q)
-		-- Build command
 		local cmd, err = build_command(q, opts)
 		if err then
 			vim.notify("Gennie error: " .. err, vim.log.levels.ERROR)
@@ -151,11 +182,9 @@ function M.ask_gennie(opts, question)
 		end
 	end
 
-	-- If question is provided, execute directly
 	if question and question ~= "" then
 		execute_gennie(question)
 	else
-		-- Otherwise prompt for question
 		vim.ui.input({ prompt = "Ask Gennie: " }, function(q)
 			if q and q ~= "" then
 				execute_gennie(q)
@@ -165,7 +194,7 @@ function M.ask_gennie(opts, question)
 end
 
 -- Function to ask gennie about selected text
-function M.ask_gennie_visual(opts, question)
+function M.ask_gennie_visual()
 	opts = opts or {}
 
 	-- Get selected text
@@ -181,92 +210,37 @@ function M.ask_gennie_visual(opts, question)
 	-- Get the selected text
 	local text = table.concat(lines, "\n")
 
-	-- If question is provided, execute directly
-	if question and question ~= "" then
-		local full_question = string.format("Regarding this text:\n%s\n\nQuestion: %s", text, question)
-		M.ask_gennie(opts, full_question)
-	else
-		-- Otherwise prompt for question
-		vim.ui.input({ prompt = "Ask Gennie about selection: " }, function(q)
-			if q and q ~= "" then
-				local full_question = string.format("Regarding this text:\n%s\n\nQuestion: %s", text, q)
-				M.ask_gennie(opts, full_question)
-			end
-		end)
-	end
-end
-
--- Parse command arguments safely
-local function parse_command_args(args)
-	local cmd_opts = {}
-	local question_parts = {}
-
-	for _, arg in ipairs(args) do
-		local profile = arg:match("^%-p=(.+)$")
-		local model = arg:match("^%-m=(.+)$")
-		if profile then
-			cmd_opts.profile = profile
-		elseif model then
-			cmd_opts.model = model
-		elseif arg == "-f" then
-			cmd_opts.followup = true
-		else
-			-- Collect remaining args as question
-			table.insert(question_parts, arg)
+	-- Prompt for question
+	vim.ui.input({ prompt = "Ask Gennie about selection: " }, function(q)
+		if q and q ~= "" then
+			local full_question = string.format("Regarding this excerpt:\n%s\n\nQuestion: %s", text, q)
+			M.ask_gennie(opts, full_question)
 		end
-	end
-
-	-- Join question parts if they exist
-	local question = #question_parts > 0 and table.concat(question_parts, " ") or nil
-	return cmd_opts, question
+	end)
 end
 
 -- Set up the plugin
 function M.setup(opts)
 	opts = opts or {}
-
 	-- Store default configuration
 	M.config.default_profile = opts.default_profile
 	M.config.default_model = opts.default_model
 
 	-- Create user commands with parameter support
-	vim.api.nvim_create_user_command("Gennie", function(args)
-		local cmd_opts, question = parse_command_args(args.fargs)
-		M.ask_gennie(cmd_opts, question)
-	end, {
-		nargs = "*",
-		complete = function(ArgLead, CmdLine, CursorPos)
-			local completions = { "-p=", "-m=", "-f" }
-			return vim.tbl_filter(function(item)
-				return item:find(ArgLead, 1, true) == 1
-			end, completions)
-		end,
-	})
+	vim.api.nvim_create_user_command("Gennie", function()
+		M.ask_gennie()
+	end, {})
 
 	vim.api.nvim_create_user_command("GennieVisual", function(args)
-		local cmd_opts, question = parse_command_args(args.fargs)
-		M.ask_gennie_visual(cmd_opts, question)
+		M.ask_gennie_visual()
 	end, {
 		range = true,
-		nargs = "*",
-		complete = function(ArgLead, CmdLine, CursorPos)
-			local completions = { "-p=", "-m=", "-f" }
-			return vim.tbl_filter(function(item)
-				return item:find(ArgLead, 1, true) == 1
-			end, completions)
-		end,
 	})
 
-	vim.api.nvim_create_user_command("GennieModel", function(arg)
-		M.set_model(arg)
+	vim.api.nvim_create_user_command("GennieConfig", function(args)
+		M.set_config(args)
 	end, {
 		nargs = "*",
-		complete = function(ArgLead, CmdLine, CursorPos)
-			local completions = { "-p=", "-m=", "-f" }
-			return vim.tbl_filter(function(item)
-				return item:find(ArgLead, 1, true) == 1
-			end, completions)
-		end,
 	})
 end
 
