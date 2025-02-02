@@ -46,7 +46,7 @@ local function build_command(question, opts)
 		return nil, "Question cannot be empty"
 	end
 
-	local cmd_parts = { "gennie", "ask" }
+	local cmd_parts = { "gennie", "ask", "--stream=false" }
 
 	-- Add profile if specified
 	if opts.profile or M.config.default_profile then
@@ -65,7 +65,7 @@ local function build_command(question, opts)
 	end
 
 	-- Add followup flag if specified
-	if opts.followup or M.config.is_followup then
+	if opts.followup or M.config.is_followup == true then
 		table.insert(cmd_parts, "-f")
 	end
 
