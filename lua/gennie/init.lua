@@ -19,20 +19,38 @@ end
 
 -- Parse config command arguments safely
 local function parse_command_args(args)
+	if not args or #args == 0 then
+		return {}
+	end
+
+	local valid_options = {
+		["-p"] = "profile",
+		["-m"] = "model",
+		["-f"] = "followup",
+	}
+
 	local cmd_opts = {}
 
 	for _, arg in ipairs(args) do
-		local profile = arg:match("^%-p=(.+)$")
-		local model = arg:match("^%-m=(.+)$")
-		local followup = arg:match("^%-f=(.+)$")
-		if profile then
-			cmd_opts.profile = profile
-		elseif model then
-			cmd_opts.model = model
-		elseif followup then
-			cmd_opts.followup = followup == "true"
+		local flag, value = arg:match("^(-[pmf])=(.+)$")
+
+		if flag and valid_options[flag] then
+			local key = valid_options[flag]
+			if key == "followup" then
+				if value == "true" then
+					cmd_opts[key] = true
+				else
+					cmd_opts[key] = false
+				end
+			else
+				cmd_opts[key] = value
+			end
 		else
-			vim.notify("Invalid params. Please use only -p, -m or -f", vim.log.levels.ERROR)
+			vim.notify(
+				string.format("Invalid parameter: %s\nValid options: -p=<profile>, -m=<model>, -f=<true|false>", arg),
+				vim.log.levels.ERROR
+			)
+			return {}
 		end
 	end
 
@@ -40,9 +58,9 @@ local function parse_command_args(args)
 end
 
 -- Input dialog
-local function input_dialog(callback)
+local function input_dialog(opts, callback)
 	local is_followup = ""
-	if M.config.is_followup then
+	if opts.is_followup or M.config.is_followup then
 		is_followup = "(FollowUp)"
 	end
 
@@ -58,7 +76,7 @@ local function input_dialog(callback)
 end
 
 -- Function to build the gennie command with parameters
-local function build_command(question)
+local function build_command(question, opts)
 	if not question or question == "" then
 		return {}, "Question cannot be empty"
 	end
@@ -66,23 +84,23 @@ local function build_command(question)
 	local cmd_parts = { "gennie", "ask", "--stream=false" }
 
 	-- Add profile if specified
-	if M.config.default_profile then
-		local profile = M.config.default_profile
+	if opts.profile or M.config.default_profile then
+		local profile = opts.profile or M.config.default_profile
 		if profile then
 			table.insert(cmd_parts, "-p=" .. profile)
 		end
 	end
 
 	-- Add model if specified
-	if M.config.default_model then
-		local model = M.config.default_model
+	if opts.model or M.config.default_model then
+		local model = opts.model or M.config.default_model
 		if model then
 			table.insert(cmd_parts, "-m=" .. model)
 		end
 	end
 
 	-- Add followup flag if specified
-	if M.config.is_followup == true then
+	if opts.is_followup or M.config.is_followup == true then
 		table.insert(cmd_parts, "-f")
 	end
 
@@ -125,8 +143,8 @@ local function create_floating_window()
 	return buf, win
 end
 
-local function execute_gennie(q)
-	local cmd, err = build_command(q)
+local function execute_gennie(q, opts)
+	local cmd, err = build_command(q, opts)
 	if err then
 		vim.notify("Gennie error: " .. err, vim.log.levels.ERROR)
 		return
@@ -200,16 +218,18 @@ function M.set_config(args)
 	end)
 end
 
-function M.ask_gennie()
-	input_dialog(function(q)
+function M.ask_gennie(opts)
+	opts = opts or {}
+	input_dialog(opts, function(q)
 		if q and q ~= "" then
-			execute_gennie(q)
+			execute_gennie(q, opts)
 		end
 	end)
 end
 
 -- Function to ask gennie about selected text
-function M.ask_gennie_visual()
+function M.ask_gennie_visual(opts)
+	opts = opts or {}
 	-- Get selected text
 	local start_pos = vim.fn.getpos("'<")
 	local end_pos = vim.fn.getpos("'>")
@@ -222,10 +242,10 @@ function M.ask_gennie_visual()
 
 	local selected_text = table.concat(lines, "\n")
 
-	input_dialog(function(q)
+	input_dialog(opts, function(q)
 		if q and q ~= "" then
 			local full_question = string.format("Regarding this excerpt:\n%s\n\nQuestion: %s", selected_text, q)
-			execute_gennie(full_question)
+			execute_gennie(full_question, opts)
 		end
 	end)
 end
@@ -251,7 +271,7 @@ function M.setup(opts)
 
 	-- Create user commands with parameter support
 	vim.api.nvim_create_user_command("Gennie", function()
-		M.ask_gennie()
+		M.ask_gennie(opts)
 	end, {})
 
 	vim.api.nvim_create_user_command("GennieLast", function()
@@ -259,7 +279,7 @@ function M.setup(opts)
 	end, {})
 
 	vim.api.nvim_create_user_command("GennieVisual", function(args)
-		M.ask_gennie_visual()
+		M.ask_gennie_visual(opts)
 	end, {
 		range = true,
 	})
