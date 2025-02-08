@@ -4,9 +4,7 @@ Neovim plugin for [Gennie Cli](https://github.com/robertoseba/gennie)
 
 This is a simple Neovim plugin I created for personal use. It is my first attempt at developing a Neovim plugin using Lua, so please manage your expectations. I use it daily in my work, and it has been particularly helpful with managing custom profiles.
 
-:::important
-IMPORTANT: This plugin has only be tested at Lazyvim distribution
-:::
+***IMPORTANT: This plugin has only be tested at Lazyvim distribution***
 
 ## Screenshots
 
