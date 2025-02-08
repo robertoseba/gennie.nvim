@@ -4,11 +4,9 @@ local M = {}
 M.config = {
 	default_profile = "default",
 	default_model = "sonnet",
-	is_followup = false,
 	chat_history = {},
 }
 
--- Escape shell arguments properly
 local function shell_escape(str)
 	if not str then
 		return nil
@@ -26,28 +24,19 @@ local function parse_command_args(args)
 	local valid_options = {
 		["-p"] = "profile",
 		["-m"] = "model",
-		["-f"] = "followup",
 	}
 
 	local cmd_opts = {}
 
 	for _, arg in ipairs(args) do
-		local flag, value = arg:match("^(-[pmf])=(.+)$")
+		local flag, value = arg:match("^(-[pm])=(.+)$")
 
 		if flag and valid_options[flag] then
 			local key = valid_options[flag]
-			if key == "followup" then
-				if value == "true" then
-					cmd_opts[key] = true
-				else
-					cmd_opts[key] = false
-				end
-			else
-				cmd_opts[key] = value
-			end
+			cmd_opts[key] = value
 		else
 			vim.notify(
-				string.format("Invalid parameter: %s\nValid options: -p=<profile>, -m=<model>, -f=<true|false>", arg),
+				string.format("Invalid parameter: %s\nValid options: -p=<profile>, -m=<model>", arg),
 				vim.log.levels.ERROR
 			)
 			return {}
@@ -60,7 +49,7 @@ end
 -- Input dialog
 local function input_dialog(opts, callback)
 	local is_followup = ""
-	if opts.is_followup or M.config.is_followup then
+	if opts.is_followup then
 		is_followup = "(FollowUp)"
 	end
 
@@ -100,7 +89,7 @@ local function build_command(question, opts)
 	end
 
 	-- Add followup flag if specified
-	if opts.is_followup or M.config.is_followup == true then
+	if opts.is_followup and opts.is_followup == true then
 		table.insert(cmd_parts, "-f")
 	end
 
@@ -151,7 +140,7 @@ local function execute_gennie(q, opts)
 	end
 
 	-- Resets history
-	if opts.is_followup == false or not opts.is_followup then
+	if not opts.is_followup or opts.is_followup == false then
 		M.config.chat_history = {}
 	end
 
@@ -194,9 +183,6 @@ local function set_config_vars(opts)
 	if opts.profile then
 		M.config.default_profile = opts.profile
 		vim.notify("Gennie Profile set to:" .. opts.profile, vim.log.levels.INFO)
-	end
-	if opts.followup ~= nil then
-		M.config.is_followup = opts.followup
 	end
 end
 
@@ -287,14 +273,12 @@ function M.last_answer(buf, win)
 	vim.bo[buf].modifiable = false
 end
 
--- Set up the plugin
 function M.setup(opts)
 	opts = opts or {}
 	-- Store default configuration
 	M.config.default_profile = opts.default_profile or "default"
 	M.config.default_model = opts.default_model or "sonnet"
 
-	-- Create user commands with parameter support
 	vim.api.nvim_create_user_command("Gennie", function()
 		M.ask_gennie(opts)
 	end, {})
