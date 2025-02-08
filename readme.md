@@ -6,6 +6,20 @@ This is a simple Neovim plugin I created for personal use. It is my first attemp
 
 [Context: "IMPORTANT: This plugin has only be tested at Lazyvim distribution"]
 
+## Screenshots
+
+![Ask](./docs/images/ask.png)
+![Answer](./docs/images/answer.png)
+
+### Model and Profile selection
+
+![Model](./docs/images/model.png)
+![Profile](./docs/images/profile.png)
+
+### Which-key config
+
+![Which-key](./docs/images/which-key.png)
+
 ## Installation
 
 1. Create a `gennie.lua` inside your Lazyvim `plugins` folder
