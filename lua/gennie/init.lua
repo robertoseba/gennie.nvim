@@ -5,6 +5,8 @@ M.config = {
 	default_profile = "default",
 	default_model = "sonnet",
 	chat_history = {},
+	available_models = { "sonnet" },
+	available_profiles = { "default" },
 }
 
 local function shell_escape(str)
@@ -280,9 +282,12 @@ end
 function M.set_model()
 	local original_ui_input = vim.ui.input
 
-	vim.ui.select({ "sonnet", "gpt-4o", "gpt-4o-mini", "groq", "maritaca", "ollama" }, {
+	vim.ui.select(M.config.available_models, {
 		prompt = "Select model > ",
 	}, function(choice)
+		if not choice or vim.trim(choice) == "" then
+			return
+		end
 		M.config.default_model = choice
 		vim.notify("Model set as:" .. choice, vim.log.levels.INFO)
 	end)
@@ -293,9 +298,12 @@ end
 function M.set_profile()
 	local original_ui_input = vim.ui.input
 
-	vim.ui.select({ "aws", "go", "linux", "personal", "php", "sql", "default" }, {
+	vim.ui.select(M.config.available_profiles, {
 		prompt = "Select profile > ",
 	}, function(choice)
+		if not choice or vim.trim(choice) == "" then
+			return
+		end
 		M.config.default_profile = choice
 		vim.notify("Profile set as:" .. choice, vim.log.levels.INFO)
 	end)
@@ -307,7 +315,10 @@ function M.setup(opts)
 	opts = opts or {}
 	-- Store default configuration
 	M.config.default_profile = opts.default_profile or "default"
-	M.config.default_model = opts.default_model or "sonnet"
+	M.config.available_models = opts.available_models
+		or { "sonnet", "gpt-4o", "gpt-4o-mini", "groq", "maritaca", "ollama" }
+	M.config.available_profiles = opts.available_profiles or { "default" }
+	M.config.default_model = opts.default_model or opts.available_models[1]
 
 	vim.api.nvim_create_user_command("Gennie", function()
 		M.ask_gennie(opts)

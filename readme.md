@@ -18,6 +18,7 @@ return {
   opts = {
     default_model = "gpt-4o",
     default_profile = "default",
+    available_profiles = { "aws", "go", "linux", "personal", "php", "sql", "default" },
   },
   dependencies = {
     "folke/which-key.nvim",
