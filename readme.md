@@ -2,8 +2,9 @@
 
 Neovim plugin for [Gennie Cli](https://github.com/robertoseba/gennie)
 
-This is a very simple plugin create for my own personal use. It's also my first foray into Neovim plugin and Lua (so don't expect too much from it!)
-I use it on my work everyday and it helps me a lot. Especially with the custom profiles.
+This is a simple Neovim plugin I created for personal use. It is my first attempt at developing a Neovim plugin using Lua, so please manage your expectations. I use it daily in my work, and it has been particularly helpful with managing custom profiles.
+
+[Context: "IMPORTANT: This plugin has only be tested at Lazyvim distribution"]
 
 ## Installation
 
@@ -13,8 +14,7 @@ I use it on my work everyday and it helps me a lot. Especially with the custom p
 ```lua
 
 return {
-  dir = "~/Code/personal/gennie.nvim",
-  config = true,
+  "robertoseba/gennie.nvim"
   opts = {
     default_model = "gpt-4o",
     default_profile = "default",
@@ -67,11 +67,19 @@ return {
       mode = "v",
     },
     {
-      "<leader>ac",
+      "<leader>am",
       function()
-        return require("gennie").set_config()
+        return require("gennie").set_model()
       end,
-      desc = "Config Gennie",
+      desc = "Set Model",
+      mode = { "n", "v" },
+    },
+    {
+      "<leader>ap",
+      function()
+        return require("gennie").set_profile()
+      end,
+      desc = "Set Profile",
       mode = { "n", "v" },
     },
     {

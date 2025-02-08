@@ -222,10 +222,11 @@ end
 -- Function to ask gennie about selected text
 function M.ask_gennie_visual(opts)
 	opts = opts or {}
-	-- Get selected text
-	local start_pos = vim.fn.getpos("'<")
-	local end_pos = vim.fn.getpos("'>")
-	local lines = vim.api.nvim_buf_get_lines(0, start_pos[2] - 1, end_pos[2], false)
+	local start_pos = vim.fn.getpos("v")
+	local end_pos = vim.fn.getpos(".")
+	local start_line = math.min(start_pos[2], end_pos[2])
+	local end_line = math.max(start_pos[2], end_pos[2])
+	local lines = vim.api.nvim_buf_get_lines(0, start_line - 1, end_line, false)
 
 	if #lines == 0 then
 		vim.notify("No text selected", vim.log.levels.ERROR)
@@ -248,7 +249,10 @@ function M.last_answer(buf, win)
 		local length = #history
 		for i = length, 1, -1 do
 			table.insert(full_text, "## Question")
-			table.insert(full_text, history[i].question)
+			local questions = vim.split(history[i].question, "\n")
+			for _, q in ipairs(questions) do
+				table.insert(full_text, q)
+			end
 			table.insert(full_text, "")
 			table.insert(full_text, "## Answer")
 			for _, a in ipairs(history[i].answer) do
@@ -271,6 +275,32 @@ function M.last_answer(buf, win)
 	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, parse_history(M.config.chat_history))
 	vim.bo[buf].modifiable = false
+end
+
+function M.set_model()
+	local original_ui_input = vim.ui.input
+
+	vim.ui.select({ "sonnet", "gpt-4o", "gpt-4o-mini", "groq", "maritaca", "ollama" }, {
+		prompt = "Select model > ",
+	}, function(choice)
+		M.config.default_model = choice
+		vim.notify("Model set as:" .. choice, vim.log.levels.INFO)
+	end)
+
+	vim.ui.input = original_ui_input
+end
+
+function M.set_profile()
+	local original_ui_input = vim.ui.input
+
+	vim.ui.select({ "aws", "go", "linux", "personal", "php", "sql", "default" }, {
+		prompt = "Select profile > ",
+	}, function(choice)
+		M.config.default_profile = choice
+		vim.notify("Profile set as:" .. choice, vim.log.levels.INFO)
+	end)
+
+	vim.ui.input = original_ui_input
 end
 
 function M.setup(opts)
