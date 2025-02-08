@@ -5,7 +5,7 @@ M.config = {
 	default_profile = "default",
 	default_model = "sonnet",
 	is_followup = false,
-	last_buffer = nil,
+	chat_history = {},
 }
 
 -- Escape shell arguments properly
@@ -150,6 +150,11 @@ local function execute_gennie(q, opts)
 		return
 	end
 
+	-- Resets history
+	if opts.is_followup == false or not opts.is_followup then
+		M.config.chat_history = {}
+	end
+
 	-- Create window before starting job
 	local buf, win = create_floating_window()
 	if not buf or not win then
@@ -172,14 +177,10 @@ local function execute_gennie(q, opts)
 
 		if obj.stdout then
 			local data = vim.split(obj.stdout, "\n")
+			table.insert(M.config.chat_history, { answer = data, question = q })
 			-- Check if buffer still exists
 			vim.schedule(function()
-				if vim.api.nvim_buf_is_valid(buf) then
-					vim.bo[buf].modifiable = true
-					vim.api.nvim_buf_set_lines(buf, 0, -1, false, data)
-					vim.bo[buf].modifiable = false
-				end
-				M.config.last_buffer = data
+				M.last_answer(buf, win)
 			end)
 		end
 	end)
@@ -220,6 +221,11 @@ end
 
 function M.ask_gennie(opts)
 	opts = opts or {}
+	if opts.is_followup == true and #M.config.chat_history == 0 then
+		vim.notify("No chat to follow up", vim.log.levels.ERROR)
+		return
+	end
+
 	input_dialog(opts, function(q)
 		if q and q ~= "" then
 			execute_gennie(q, opts)
@@ -250,15 +256,34 @@ function M.ask_gennie_visual(opts)
 	end)
 end
 
-function M.last_answer()
-	if not M.config.last_buffer then
+function M.last_answer(buf, win)
+	local function parse_history(history)
+		local full_text = {}
+		local length = #history
+		for i = length, 1, -1 do
+			table.insert(full_text, "## Question")
+			table.insert(full_text, history[i].question)
+			table.insert(full_text, "")
+			table.insert(full_text, "## Answer")
+			for _, a in ipairs(history[i].answer) do
+				table.insert(full_text, a)
+			end
+			table.insert(full_text, "")
+			table.insert(full_text, "---")
+		end
+		return full_text
+	end
+
+	if #M.config.chat_history == 0 then
 		vim.notify("No previous question", vim.log.levels.INFO)
 		return
 	end
 
-	local buf, win = create_floating_window()
+	if not buf and not win then
+		buf, win = create_floating_window()
+	end
 	vim.bo[buf].modifiable = true
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, M.config.last_buffer)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, parse_history(M.config.chat_history))
 	vim.bo[buf].modifiable = false
 end
 
@@ -278,7 +303,7 @@ function M.setup(opts)
 		M.last_answer()
 	end, {})
 
-	vim.api.nvim_create_user_command("GennieVisual", function(args)
+	vim.api.nvim_create_user_command("GennieVisual", function()
 		M.ask_gennie_visual(opts)
 	end, {
 		range = true,
